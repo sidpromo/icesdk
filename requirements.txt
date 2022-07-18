@@ -1,0 +1,7 @@
+flask==2.0.2
+Werkzeug==2.0.2
+# jsonschema==4.5.1
+# kubernetes==19.15.0
+# netius==1.19.0
+# protobuf==3.19.1
+# requests==2.26.0
