@@ -25,4 +25,4 @@ RUN pip install -r requirements.txt --src /usr/local/src
 COPY . .
 
 EXPOSE 5000
-CMD [ "python", "IceSdkApi.py" ]
+CMD [ "python", "IceSdkApi.py","-w","/data/plugins" ]
