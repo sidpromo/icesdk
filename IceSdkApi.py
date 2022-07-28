@@ -1,25 +1,39 @@
 # import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, after_this_request
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from argparse import ArgumentParser
+import tarfile
 
 # app.secret_key = "secret key"
 app = Flask(__name__)
 
-def allowed_file(filename):
-    return '.' in filename and \
-        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify(success=False, message='Bad request: File is too large')
+    return jsonify(success=False, message='Bad request: attached file is too large')
 
 @app.route("/")
-def hello_world():
-    return "Usage: curl -F 'files=@pathToSoFile -F 'files=@pathToSigFile' http://localhost:5000/upload"
+def help():
+    return "Usage:\n \tcurl -F 'files=@pathToSoFile -F 'files=@pathToSigFile' http://localhost:5000/upload \n\tcurl http://localhost:5000/download --output valami.tar.gz \n"
+
+@app.route('/download', methods=['GET', 'POST'])
+def download_files():
+    import uuid
+    # filename = str(uuid.uuid4())
+    filename='plugins.tar.gz'
+    filename = UPLOAD_FOLDER.joinpath(filename)
+    make_tarfile(filename,UPLOAD_FOLDER)
+    #return send_from_directory(directory=UPLOAD_FOLDER, filename=filename)
+    @after_this_request
+    def remove_file(response):
+        try:
+            filename.unlink()
+        except Exception as error:
+            app.logger.info("Error removing or closing downloaded file handle", error)
+        return response
+    return send_file(filename, as_attachment=False)
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_files():
@@ -49,6 +63,18 @@ def upload_files():
         return resp
         
     return jsonify(success=False, message='Bad request: request method should be POST')
+
+
+def make_tarfile(output_filename, source_dir):
+    with tarfile.open(output_filename, "w:gz") as tar:
+        tar.add(source_dir, arcname=UPLOAD_FOLDER.name)
+    return tar
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def upload_file(file):
     # if user does not select file, browser also
@@ -81,10 +107,10 @@ def setup_logger():
 
   app.logger.addHandler(stream_handler)
 
-  p = Path.cwd().joinpath(Path('logs'))
-  p.mkdir(parents=True, exist_ok=True)
+  logDir = Path.cwd().joinpath(Path('logs'))
+  logDir.mkdir(parents=True, exist_ok=True)
 
-  log_file=p.joinpath('app.log')
+  log_file=logDir.joinpath('app.log')
 
   file_handler = RotatingFileHandler(log_file, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
   file_handler.setFormatter(log_format)
