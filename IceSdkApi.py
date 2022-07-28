@@ -13,63 +13,61 @@ def allowed_file(filename):
     return '.' in filename and \
         filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify(success=False, message='Bad request: File is too large')
+
 @app.route("/")
 def hello_world():
-    return "<p>Hello, World!</p>"
+    return "Usage: curl -F 'files=@pathToSoFile -F 'files=@pathToSigFile' http://localhost:5000/upload"
 
 @app.route('/upload', methods=['GET', 'POST'])
-def upload_file():
+def upload_files():
     if not UPLOAD_FOLDER.is_dir():
         UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
     app.logger.info('Upload file')
     if request.method == 'POST':
         # check if the post request has the file part
-        if 'file' not in request.files:
-            app.logger.info('No file part')
-            return jsonify(success=False, message='No file part in the request, please give a file as parameter')
+        if 'files' not in request.files:
+            app.logger.info('Bad request: missing files part')
+            return jsonify(success=False, message='Bad request: missing files part: please attach one .so and one .sig files as parameter')
 
-        file = request.files['file']
-        # if user does not select file, browser also
-        # submit an empty part without filename
-        if file.filename == '':
-            app.logger.info('No selected file')
-            return jsonify(success=False, message='No selected file, the file part in the request is present, but empty.')
+        files = request.files.getlist('files')
+        newFiles={}
+        for file in files:
+            result = upload_file(file)
+            if not result['success']:
+                return jsonify(success=False, message=result['message'])
+            newFiles[file]=result['file']
 
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            app.logger.info('Uploading %s', filename)
-            new_file=app.config['UPLOAD_FOLDER'].joinpath(filename)
-            if new_file.is_file():
-                return jsonify(success=False, message='File already exists.')
+        for reqFile, newFile in newFiles.items():
+            reqFile.save(newFile)
+        
+        resp = jsonify(success=True, message=f'File(s) successfully uploaded')
+        resp.status_code = 200
+        return resp
+        
+    return jsonify(success=False, message='Bad request: request method should be POST')
 
-            file.save(new_file)
-            resp = jsonify(success=True, message=f'{filename} successfuly uploaded.')
-            resp.status_code = 200
-            return resp
+def upload_file(file):
+    # if user does not select file, browser also
+    # submit an empty part without filename
+    if file.filename == '':
+            app.logger.info('Bad request: no selected file')
+            return dict(success=False, message='Bad request: no selected file, the file part in the request is present, but empty.')
 
-    return jsonify(success=False)
- 
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        app.logger.info('Uploading %s', filename)
+        newFile=app.config['UPLOAD_FOLDER'].joinpath(filename)
+        if newFile.is_file():
+            return dict(success=False, message=f'File "{filename}" already exists.')
 
-# Logging only for the PoC version
-# @app.before_first_request
-# def before_first_request():
-#     log_level = logging.INFO
+        return dict(success=True, file=newFile, filename = filename)
 
-#     for handler in app.logger.handlers:
-#         app.logger.removeHandler(handler)
+    return jsonify(success=False, message='Bad request: only .so and .sig extensions are allowed')
 
-#     root = os.path.dirname(os.path.abspath(__file__))
-#     logdir = os.path.join(root, 'logs')
-#     if not os.path.exists(logdir):
-#         os.mkdir(logdir)
-
-#     log_file = os.path.join(logdir, 'app.log')
-#     handler = logging.FileHandler(log_file)
-#     handler.setLevel(log_level)
-#     app.logger.addHandler(handler)
-#     app.logger.setLevel(log_level)
- 
 
 def setup_logger():
   MAX_BYTES = 10e6 # Maximum size for a log file
@@ -107,7 +105,7 @@ def setup_args():
 
 if __name__ == "__main__":
     #UPLOAD_FOLDER = Path('/data/plugins_2')
-    ALLOWED_EXTENSIONS = {'so'}
+    ALLOWED_EXTENSIONS = {'so', 'sig'}
     
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     app.use_reloader = False
