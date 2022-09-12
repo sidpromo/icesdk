@@ -78,5 +78,15 @@ def get_response_text_from_post(url, tls_enabled, retry_count, files):
             print(f"Unexpected error while getting correlator config from REST server at {url}, error: {err}, {type(err)}")
             retry = retry - 1
             time.sleep(1)
+from argparse import ArgumentParser
+def setup_args():
+    parser = ArgumentParser(
+        description='Arguments for ICE-SDK file uploader RestAPI')
+    parser.add_argument('-w', '--workspace',
+                        required=True,
+                        action='store',
+                        help='Destination directory where the uploaded files are going to be stored.')
+    my_args = parser.parse_args()
 
+    return my_args
 
